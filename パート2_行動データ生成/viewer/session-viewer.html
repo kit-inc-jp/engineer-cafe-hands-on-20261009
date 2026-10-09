@@ -1,0 +1,1104 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>行動ログビューア</title>
+<style>
+/* layout: 上に人物カード＋概要。下は「行動の目次（左・細い）」と「選んだ行動：理由＋そのとき見ていたページの再現＋状態（右・広い）」 */
+:root{
+  --bg:#f3f5f6;--panel:#ffffff;--ink:#1d2a33;--muted:#5d6b75;--line:#d9e0e4;
+  --accent:#1f5f8b;--accent-soft:#e3eef6;--buy:#8a5a12;--buy-soft:#fbefd9;--warn:#a3392b;--warn-soft:#fbe6e2;--code:#eef2f4;--page:#fbfbfa;
+  --font-body:"Yu Gothic UI","Hiragino Sans","Meiryo",system-ui,sans-serif;
+  --font-read:"Yu Mincho","Hiragino Mincho ProN","Noto Serif JP",serif;
+  --font-mono:ui-monospace,Consolas,"BIZ UDGothic",monospace;
+  color-scheme:light;
+}
+/* 配色は明るい色に固定（OS・ブラウザのダークモードでも同じ見た目にする） */
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 var(--font-body)}
+main{max-width:1240px;margin:0 auto;padding-inline:16px;padding-block:32px 48px}
+@media(min-width:760px){main{padding-inline:32px}}
+h1{font-size:clamp(24px,3.6vw,34px);line-height:1.35;margin:4px 0 8px;font-weight:700;text-wrap:balance}
+h2{font-size:18px;margin:0;font-weight:700;text-wrap:balance}
+h3{font-size:13px;margin:0 0 6px;color:var(--muted);font-weight:600;letter-spacing:.04em}
+p{margin:0}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.eyebrow{font-size:12px;letter-spacing:.14em;color:var(--muted)}
+.small{font-size:12px;color:var(--muted)}
+.mono{font-family:var(--font-mono);font-size:12px;overflow-wrap:anywhere}
+.lead{color:var(--muted);max-width:68ch}
+.stack{display:grid;gap:24px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px}
+details>summary{cursor:pointer;color:var(--accent);font-size:13px}
+/* 人物 */
+.nickname{font-size:16px;font-weight:700;margin-top:10px}
+.persona{color:var(--muted);max-width:68ch;margin-top:6px}
+.profile{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px 24px;margin-top:14px}
+.kv{min-width:0}
+.kv ul{margin:0;padding-left:18px}
+.kv p,.kv li{overflow-wrap:anywhere}
+/* 概要 */
+.overview{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.badge{padding:4px 12px;border-radius:999px;background:var(--accent-soft);font-size:13px;font-variant-numeric:tabular-nums}
+.badge.buy{background:var(--buy-soft);color:var(--buy)}
+.badge.warn{background:var(--warn-soft);color:var(--warn)}
+.files{padding:16px 20px}
+.slots{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px 20px}
+.slot{min-width:0;border:1px dashed var(--line);border-radius:10px;padding:10px 12px;transition:background .15s,border-color .15s}
+.slot.drop{border-color:var(--accent);background:var(--accent-soft);outline:none}
+.drop-hint{font-size:11px;color:var(--muted);margin:0}
+.slot label{font-size:13px}
+.slot .small{overflow-wrap:anywhere}
+.problems{border-color:var(--warn)}
+.problems h2{color:var(--warn)}
+.problem-list{margin:12px 0 0;padding-left:22px;display:grid;gap:10px;font-size:13px}
+.problem-list li{overflow-wrap:anywhere}
+.problem-list .where{font-weight:700;margin-right:6px}
+.problem-list .lv{display:inline-block;font-size:11px;padding:0 6px;border-radius:4px;margin-right:6px;background:var(--warn-soft);color:var(--warn)}
+.problem-list .lv.minor{background:var(--code);color:var(--muted)}
+.problem-list .fix{display:block;color:var(--muted);margin-top:2px}
+.problem-list .fix::before{content:"直し方：";font-weight:600;color:var(--ink)}
+/* 左：行動の目次 */
+.layout{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:24px;align-items:start}
+.flow{list-style:none;margin:10px 0 0;padding:0}
+.step{position:relative;padding:0 0 6px 34px}
+.step:not(:last-child)::before{content:"";position:absolute;left:11px;top:22px;bottom:-6px;width:1px;background:var(--line)}
+.num{position:absolute;left:0;top:9px;width:23px;height:23px;border-radius:50%;display:grid;place-items:center;font-size:11px;background:var(--panel);border:1px solid var(--line);font-variant-numeric:tabular-nums}
+.step.active .num{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+.step.kind-buy .num{border-color:var(--buy);color:var(--buy)}
+.step.kind-buy.active .num{background:var(--buy);color:var(--panel)}
+.step-btn{display:block;width:100%;text-align:left;background:transparent;border:1px solid transparent;border-radius:8px;padding:6px 10px}
+.step-btn:hover{background:var(--panel);border-color:var(--line)}
+.step-btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.step-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.step-title{font-weight:700;font-size:14px}
+.time{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.step-sub{display:block;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mark{display:inline-block;font-size:11px;padding:0 6px;border-radius:4px;margin-left:4px;vertical-align:1px;background:var(--code);color:var(--muted);font-weight:400}
+.mark.buy{background:var(--buy-soft);color:var(--buy)}
+.mark.warn{background:var(--warn-soft);color:var(--warn)}
+.gap{display:block;font-size:10px;color:var(--muted);padding:0 0 0 10px;font-variant-numeric:tabular-nums}
+/* 右：詳細 */
+.detail{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto;display:grid;gap:16px}
+.d-label{font-size:12px;color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums}
+.reason{margin:0;font-size:16px;line-height:1.9;padding:12px 16px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;overflow-wrap:anywhere}
+.frame{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--page)}
+.addr{display:flex;gap:8px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);background:var(--code)}
+.addr .dots{display:flex;gap:4px}.addr .dots i{width:8px;height:8px;border-radius:50%;background:var(--line);display:block}
+.addr .mono{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.page{padding:18px;display:grid;gap:14px;min-width:0}
+.action{justify-self:start;font-size:13px;padding:4px 12px;border-radius:999px;background:var(--buy-soft);color:var(--buy);font-weight:600}
+.action.info{background:var(--accent-soft);color:var(--accent)}
+.crumbs{font-size:12px;color:var(--muted)}
+.prod{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:18px}
+.prod>*{min-width:0}
+.gallery{display:grid;gap:6px;min-width:0}
+.thumbs{display:flex;gap:6px;overflow-x:auto}
+.thumbs img,.thumbs .noimg{width:52px;height:52px;flex:none}
+.pimg{width:100%;aspect-ratio:1/1;max-width:100%;object-fit:cover;border-radius:8px;background:var(--code);display:block}
+.noimg{display:grid;place-items:center;aspect-ratio:1/1;max-width:100%;border-radius:8px;background:var(--code);color:var(--muted);font-size:11px;text-align:center;padding:6px;overflow:hidden}
+.pname{font-size:18px;font-weight:700;line-height:1.5}
+.pprice{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.pprice small{font-size:12px;font-weight:400;color:var(--muted);margin-left:6px}
+.desc{font-size:14px;line-height:1.85}
+.specs{width:100%;border-collapse:collapse;font-size:12px}
+.specs th,.specs td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
+.specs th{color:var(--muted);font-weight:600}
+.specs tr.sel td{background:var(--accent-soft);font-weight:600}
+.article{font-family:var(--font-read);font-size:15px;line-height:2;max-width:42em}
+.article h2{font-family:var(--font-body);font-size:17px;margin:20px 0 6px}
+.article p{margin:0 0 10px}
+.article img,.article .noimg{width:100%;max-width:100%;border-radius:8px;margin:6px 0 12px;display:block}
+.article img{height:auto}
+.article .noimg{aspect-ratio:16/7}
+.article ul{padding-left:20px}
+.atitle{font-size:20px;font-weight:700;line-height:1.5;text-wrap:balance}
+.linkcard{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13px;background:var(--panel)}
+.linkcard .pimg,.linkcard .noimg{width:56px;flex:none}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px}
+.card{font-size:12px;display:grid;gap:4px;align-content:start}
+.card.hit{outline:2px solid var(--buy);outline-offset:3px;border-radius:6px}
+.chips-row{display:flex;flex-wrap:wrap;gap:6px}
+.cat-chip{font-size:12px;padding:3px 10px;border:1px solid var(--line);border-radius:999px;background:var(--panel)}
+.cat-chip.hit{border-color:var(--buy);background:var(--buy-soft);color:var(--buy);font-weight:600}
+.cat-group{display:grid;gap:6px}
+.rowlist{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.rowlist li{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;align-items:start;padding:8px;border-radius:8px}
+.rowlist.plain li{grid-template-columns:minmax(0,1fr);border-bottom:1px solid var(--line);border-radius:0}
+.rowlist li.hit{outline:2px solid var(--buy);outline-offset:-2px;border-radius:8px}
+.rowlist .thumb{width:72px;height:72px;object-fit:cover;border-radius:6px;background:var(--code);display:block}
+.rowlist .noimg.thumb{font-size:10px;aspect-ratio:auto;height:72px}
+.row-title{font-weight:600;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
+.row-title .mark{margin-left:6px}
+.row-sub{font-size:12px;color:var(--muted);line-height:1.7}
+.card b{font-variant-numeric:tabular-nums}
+.lines{width:100%;border-collapse:collapse;font-size:13px}
+.lines th,.lines td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}
+.lines th{color:var(--muted);font-weight:600;font-size:12px}
+.lines .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.params{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;font-size:13px;margin:0}
+.params dt{color:var(--muted)}
+.params dd{margin:0;overflow-wrap:anywhere}
+.hint{font-size:12px;color:var(--muted)}
+.state{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.state>div{min-width:0;border-top:1px solid var(--line);padding-top:10px}
+.item{margin:4px 0;font-size:13px}
+.item-name{font-weight:600;overflow-wrap:anywhere}
+.total{font-size:12px;margin-top:4px;font-variant-numeric:tabular-nums;color:var(--muted)}
+.empty{color:var(--muted);font-size:13px}
+pre{background:var(--code);border-radius:8px;padding:12px;margin:8px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 var(--font-mono);max-height:420px;overflow:auto}
+/* 入力 */
+label{font-weight:600;display:block}
+input[type=file]{display:block;max-width:100%;margin:6px 0;font-size:12px}
+textarea{width:100%;min-height:150px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--code);font:12px/1.6 var(--font-mono);resize:vertical}
+.controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:8px 14px;min-height:40px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+.btn:disabled{opacity:.5;cursor:default}
+.drop{outline:2px dashed var(--accent);outline-offset:4px}
+#error{color:var(--warn);white-space:pre-wrap;margin-top:10px;font-size:13px}
+@media(max-width:860px){.layout{grid-template-columns:1fr}.detail{position:static;max-height:none;overflow:visible}}
+@media(prefers-reduced-motion:no-preference){.step-btn{transition:border-color .15s,background .15s}}
+</style>
+</head>
+<body>
+<main id="app">
+  <header>
+    <p class="eyebrow">仮想ユーザー行動ログ / 1 SESSION</p>
+    <h1 id="title">行動ログビューア</h1>
+    <p class="lead">user.json と events.json を読み込むと、行動の流れを表示します。</p>
+  </header>
+
+  <div class="stack" style="margin-top:24px">
+    <section id="input-area" class="panel files" aria-label="読み込むファイル">
+      <div class="slots">
+        <div class="slot" id="slot-user"><label for="user-file">ユーザー情報（user.json）</label><p class="drop-hint">ここにドロップ（ファイル名は問いません）</p><input id="user-file" type="file" accept=".json,application/json"><p id="user-status" class="small"></p></div>
+        <div class="slot" id="slot-events"><label for="events-file">行動ログ（events.json）</label><p class="drop-hint">ここにドロップ（ファイル名は問いません）</p><input id="events-file" type="file" accept=".json,.jsonl,application/json"><p id="events-status" class="small"></p></div>
+      </div>
+    </section>
+
+    <section id="problems" class="panel problems" role="alert" hidden aria-labelledby="problems-title">
+      <h2 id="problems-title"></h2>
+      <p id="problems-lead" class="small" style="margin-top:4px"></p>
+      <ol id="problem-list" class="problem-list"></ol>
+      <div class="controls">
+        <button id="copy-fix" class="btn primary" type="button">AIへの修正依頼文をコピー</button>
+        <span id="copy-status" class="small" style="align-self:center" role="status"></span>
+      </div>
+      <details id="fix-box" style="margin-top:10px"><summary>修正依頼文を見る</summary><textarea id="fix-text" readonly spellcheck="false" style="min-height:220px;margin-top:8px"></textarea></details>
+    </section>
+
+    <section id="result" class="stack" hidden>
+      <section class="panel" aria-labelledby="profile-title">
+        <h2 id="profile-title">ユーザー情報</h2>
+        <p id="nickname" class="nickname" hidden></p>
+        <p id="persona" class="persona"></p>
+        <div id="profile" class="profile"></div>
+      </section>
+
+      <div id="overview" class="overview" aria-label="セッションの概要"></div>
+
+      <div class="layout">
+        <nav aria-labelledby="flow-title">
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:baseline">
+            <h2 id="flow-title">行動の流れ</h2><span id="tz" class="small"></span>
+          </div>
+          <ol id="flow" class="flow"></ol>
+        </nav>
+        <section id="detail" class="panel detail" aria-live="polite" aria-labelledby="d-title">
+          <div><p id="d-label" class="d-label"></p><h2 id="d-title"></h2></div>
+          <blockquote id="d-reason" class="reason"></blockquote>
+          <div class="frame" aria-label="このとき見ていたページ">
+            <div class="addr"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span id="d-path" class="mono"></span></div>
+            <div id="d-page" class="page"></div>
+          </div>
+          <div class="state">
+            <div><h3>この行動の直後のカート</h3><div id="d-cart"></div></div>
+            <div id="d-wish-box"><h3>お気に入り</h3><div id="d-wish"></div></div>
+            <div><h3>この時点までの購入</h3><div id="d-bought"></div></div>
+          </div>
+          <details><summary>この行動のログ（JSON）</summary><pre id="d-raw"></pre></details>
+        </section>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- ③の手順で、次の1行を {"user": user.jsonの中身, "events": events.jsonの中身} に置き換える -->
+<!-- ページ再現用のECデータ。file:// で開いても読めるよう、同じフォルダの ec-data.js を script で読み込む -->
+<script src="ec-data.js"></script>
+<script id="session-data" type="application/json">
+{"user": null, "events": []}
+</script>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const fmt = n => new Intl.NumberFormat('ja-JP').format(n);
+
+const LABELS = {
+  view_top:'トップを見る', view_category_list:'カテゴリ一覧を見る', filter_items:'カテゴリで絞り込む', sort_items:'並べ替える',
+  search:'キーワード検索', view_item_list:'商品一覧を見る', view_item:'商品詳細を見る', add_to_cart:'カートに入れる',
+  remove_from_cart:'カートから削除', add_to_wishlist:'お気に入りに追加', view_wishlist:'お気に入りを見る', view_cart:'カートを見る',
+  begin_checkout:'購入手続きへ', purchase:'注文を確定', view_blog_list:'ブログ一覧を見る', view_article:'ブログ記事を読む',
+  view_news_list:'お知らせ一覧を見る', view_news:'お知らせを読む', leave_site:'サイトを離れる'
+};
+const ITEM = ['item_id','item_name','price','tax_rate_percent','spec_id'];
+const REQUIRED = {
+  view_top:['path'], view_category_list:['path'], filter_items:['path','filter_type','filter_value'], sort_items:['path','sort_type'],
+  search:['path','search_term'], view_item_list:['path','items'], view_item:['path',...ITEM], add_to_cart:['path',...ITEM,'quantity'],
+  remove_from_cart:['path',...ITEM,'quantity'], add_to_wishlist:['path',...ITEM], view_wishlist:['path','items'], view_cart:['path','items'],
+  begin_checkout:['path','items'], purchase:['path','transaction_id','items','shipping_address'], view_blog_list:['path'],
+  view_article:['path','article_id','article_title'], view_news_list:['path'], view_news:['path','news_id','news_title'], leave_site:['path']
+};
+const OPTIONAL = ['category1','category2','category3'];
+const SORTS = {price_low_to_high:'価格の安い順', price_high_to_low:'価格の高い順', newest:'新着順'};
+const PROFILE_LABELS = [['age_group','年代'],['household','暮らし方'],['occupation','仕事・日中'],['shopping_goal','今回の目的'],
+  ['purchase_intent','購入の意向'],['budget_feel','予算感'],['decision_criteria','重視すること'],['habits','くせ・サイトとの関係'],['constraints','避けたいこと・制約']];
+
+let model = null, selected = 0;
+// ECデータ（ページ再現用）。source: embedded / fetch / files
+let ec = null;
+
+const el = (tag, text, cls) => { const n = document.createElement(tag); if (text != null) n.textContent = text; if (cls) n.className = cls; return n; };
+const toDate = ts => new Date(ts.replace(' ', 'T') + 'Z');
+const key = it => it.item_id + '#' + it.spec_id;
+const qty = list => list.reduce((s, x) => s + (x.quantity || 0), 0);
+const sum = list => list.reduce((s, x) => s + x.price * (x.quantity || 0), 0);
+const dur = sec => { const m = Math.floor(sec / 60), s = sec % 60, h = Math.floor(m / 60); return (h ? h + '時間' : '') + (m % 60 ? (m % 60) + '分' : '') + (s || (!h && !(m % 60)) ? s + '秒' : ''); };
+const pick = p => ({item_id: p.item_id, item_name: p.item_name, price: p.price, tax_rate_percent: p.tax_rate_percent, spec_id: p.spec_id});
+
+/* ---------- ECデータ ---------- */
+// 行動ログの item_id は商品番号（1〜604）。product.json・product-light.json とも product_id がこの番号。
+// 古い形式の product.json（product_id が長いID）の場合は商品名で番号（_short）を対応づける。product.json が無ければ product-light.json だけで組み立てる
+function makeEc(products, blogs, news, source, light, categories) {
+  let list = products || [];
+  if (!list.length && light && light.length) list = light.map(l => ({
+    product_id: 'light-' + l.product_id, product_name: l.product_name, price: l.price, detailed_description: l.detailed_description,
+    categories: (l.categories || []).map(name => ({category_name: name})), is_reduced_tax_rate: (l.categories || [])[0] === '食品',
+    product_specifications: [{spec_id: 1, price: null}], _short: l.product_id
+  }));
+  const shortByName = light && light.length ? new Map(light.map(l => [l.product_name, l.product_id])) : null;
+  list.forEach((p, i) => { if (p._short == null) p._short = Number.isInteger(p.product_id) ? p.product_id : shortByName ? shortByName.get(p.product_name) : i + 1; });
+  return {
+    products: new Map(list.map(p => [p.product_id, p])),
+    byShort: new Map(list.filter(p => p._short != null).map(p => [Number(p._short), p])),
+    blogs: new Map((blogs || []).map(b => [Number(b.blog_id), b])),
+    news: new Map((news || []).map(n => [Number(n.id), n])),
+    categories: categories || [],
+    hasLight: !!(light && light.length) || source === 'embedded' || list.some(p => Number.isInteger(p.product_id)),
+    raw: {products, blogs, news, light},
+    source
+  };
+}
+// 番号（行動ログの item_id、ブログ・お知らせの product_id）から商品を引く
+function prodOf(id) {
+  if (!ec || id == null) return null;
+  if (/^\d+$/.test(String(id))) return ec.byShort.get(Number(id)) || null;
+  return ec.products.get(id) || null;
+}
+const productImages = p => (Array.isArray(p.images) && p.images.length ? p.images.map(i => i.image_url) : (p.image_urls || [])).filter(Boolean);
+const grossOf = (p, specId) => { const s = (p.product_specifications || []).find(x => x.spec_id === specId); return s && s.price != null ? s.price : p.price; };
+const taxOf = p => p.is_reduced_tax_rate ? 8 : 10;
+const netOf = (gross, rate) => Math.floor(gross * 100 / (100 + rate));
+
+function img(src, alt, cls) {
+  if (typeof src !== 'string' || !/^https:\/\//.test(src)) return el('div', alt ? '画像なし：' + alt : '画像なし', 'noimg ' + (cls || ''));
+  const i = document.createElement('img');
+  i.src = src; i.alt = alt || ''; i.loading = 'lazy'; i.referrerPolicy = 'no-referrer'; if (cls) i.className = cls;
+  i.addEventListener('error', () => { const ph = el('div', '画像を表示できません' + (alt ? '：' + alt : ''), 'noimg ' + (cls || '')); i.replaceWith(ph); }, {once: true});
+  return i;
+}
+// ブログ・お知らせ本文：許可したタグだけを残して描画する
+function safeBody(html) {
+  const doc = new DOMParser().parseFromString(String(html || ''), 'text/html'), out = document.createDocumentFragment();
+  const ALLOW = new Set(['P','H2','H3','UL','OL','LI','STRONG','EM','BR','B']);
+  const walk = (node, parent) => {
+    for (const c of node.childNodes) {
+      if (c.nodeType === 3) { parent.append(c.textContent); continue; }
+      if (c.nodeType !== 1) continue;
+      if (c.tagName === 'IMG') { parent.append(img(c.getAttribute('src'), c.getAttribute('alt'))); continue; }
+      if (ALLOW.has(c.tagName)) { const n = document.createElement(c.tagName.toLowerCase()); walk(c, n); parent.append(n); }
+      else walk(c, parent);
+    }
+  };
+  walk(doc.body, out);
+  return out;
+}
+
+/* ---------- 入力と検証 ---------- */
+// 問題は「どこが・何が違う・どう直すか」で集め、同じ問題は複数のイベントをまとめて1行にする。
+// level: error = 形式が違い表示できない / warn = 表示はできるが直すべき点
+class InputError extends Error { constructor(issues) { super('入力に問題があります'); this.issues = issues; } }
+const TOP_KEYS = ['user_id', 'timestamp', 'site_activities', 'reason_for_the_action'];
+const ADDRESS_KEYS = ['label', 'prefecture', 'postal_code', 'address1', 'address2'];
+const FIELD_HINTS = {
+  path: 'ページのpath（「/」から始まる。例：/items/464）', item_id: 'product-light.json の product_id（1〜604の整数。例：464）',
+  item_name: 'product-light.json の product_name', price: '税抜単価＝floor(税込価格×100÷(100+税率))',
+  tax_rate_percent: '食品なら 8、それ以外は 10', spec_id: '常に 1',
+  quantity: '個数（1以上の整数）', items: '商品の配列（各要素に item_id, item_name, price, tax_rate_percent, spec_id, quantity）',
+  transaction_id: '注文番号（例："tx-{user_id}-01"）', shipping_address: '架空配送先 {"label": "自宅", "prefecture": "東京都", "postal_code": "100-0000", "address1": "千代田区架空町1-2-3", "address2": null}',
+  article_id: 'blog-light.json の blog_id（数値）', article_title: 'blog-light.json の title', news_id: 'news-light.json の id（数値）', news_title: 'news-light.json の title',
+  search_term: '検索語', filter_type: '"category"', filter_value: 'カテゴリIDの文字列（例："78"）', sort_type: '"price_low_to_high" か "price_high_to_low"'
+};
+const EXTRA_HINTS = {
+  order_id: '「transaction_id」に名前を変える', total_price: '削除する（合計はビューアが計算します）',
+  categories: '削除する（必要なら category1・category2 に文字列で入れる）', stay_duration_seconds: '削除する（滞在時間は timestamp の差で表します）',
+  page_type: '削除する（ページの種類はイベント名で表します）', category_id: '削除する（filter_items の filter_value と path で表します）',
+  category_name: '削除する（カテゴリ名はビューアが表示します）', page: '「path」に名前を変える', url: '「path」に名前を変え、ドメインを除いたpathにする',
+  product_id: '「item_id」に名前を変える', product_name: '「item_name」に名前を変える', order_total: '削除する（合計はビューアが計算します）'
+};
+// 知らないイベント名に、path や page_type から正しい名前を提案する
+function suggestEvent(name, p, r) {
+  const path = String(p.path || r.page || p.page || ''), type = String(p.page_type || '');
+  if (path === '/' || type === 'top') return 'view_top';
+  if (/^\/news\/\d+/.test(path) || type === 'news') return 'view_news（news_id, news_title も入れる）';
+  if (/^\/news\/?$/.test(path)) return 'view_news_list';
+  if (/^\/blogs?\/\d+/.test(path) || type === 'blog' || type === 'article') return 'view_article（article_id, article_title も入れる）';
+  if (/^\/blogs?\/?$/.test(path)) return 'view_blog_list';
+  if (/^\/categor/.test(path) || type === 'category') return 'filter_items（path は "/items?category[]={カテゴリID}"、filter_type は "category"、filter_value はカテゴリIDの文字列）';
+  if (/^\/(items|products)\//.test(path) || type === 'product' || type === 'item') return 'view_item';
+  if (/^\/cart/.test(path)) return 'view_cart';
+  if (/^\/checkout\/complete/.test(path)) return 'purchase';
+  if (/^\/checkout/.test(path)) return 'begin_checkout';
+  if (/[?&]q=/.test(path) || /search/.test(name)) return 'search';
+  if (/^\/mypage\/favorites/.test(path)) return 'view_wishlist';
+  return null;
+}
+function suggestPath(path) {
+  let m;
+  if ((m = path.match(/^\/products?\/(\d+)$/))) return '/items/' + m[1];
+  if ((m = path.match(/^\/products?\/(.+)$/))) return '/items/{product_id}（product-light.json の番号を使う）';
+  if ((m = path.match(/^\/categor(?:y|ies)\/(\d+)/))) return '/items?category[]=' + m[1];
+  if ((m = path.match(/^\/blog\/(\d+)/))) return '/blogs/' + m[1];
+  if (/^https?:\/\//.test(path)) return 'ドメインを除いた「/」から始まるpath';
+  return null;
+}
+function utcString(d) { return d.toISOString().slice(0, 19).replace('T', ' '); }
+
+// JSON.parse のエラー文は位置を含まないことがあるため、最初に壊れている位置と原因を自前で探す
+function locateJsonError(t) {
+  let i = 0;
+  const fail = kind => { throw {pos: i, kind}; };
+  const ws = () => { while (i < t.length && /\s/.test(t[i])) i++; if (t[i] === '/' && (t[i + 1] === '/' || t[i + 1] === '*')) fail('comment'); };
+  const str = () => { i++; while (i < t.length && t[i] !== '"') { if (t[i] === '\\') i++; else if (t[i] === '\n') fail('newline-in-string'); i++; } if (i >= t.length) fail('eof'); i++; };
+  const value = ctx => {
+    ws(); const c = t[i];
+    if (i >= t.length) fail('eof');
+    if (c === '{') { i++; ws(); if (t[i] === '}') { i++; return; } for (;;) { ws(); if (t[i] === '}') fail('trailing-comma'); if (t[i] === "'") fail('single-quote'); if (t[i] !== '"') fail(i >= t.length ? 'eof' : 'key'); str(); ws(); if (t[i] !== ':') fail(i >= t.length ? 'eof' : 'colon'); i++; value(); ws(); if (t[i] === ',') { i++; continue; } if (t[i] === '}') { i++; return; } fail(i >= t.length ? 'eof' : 'missing-comma'); } }
+    if (c === '[') { i++; ws(); if (t[i] === ']') { i++; return; } for (;;) { ws(); if (t[i] === ']') fail('trailing-comma'); value(); ws(); if (t[i] === ',') { i++; continue; } if (t[i] === ']') { i++; return; } fail(i >= t.length ? 'eof' : 'missing-comma'); } }
+    if (c === '"') return str();
+    if (c === "'") fail('single-quote');
+    const m = t.slice(i).match(/^(-?\d+(\.\d+)?([eE][+-]?\d+)?|true|false|null)/);
+    if (m) { i += m[0].length; return; }
+    fail('value');
+  };
+  if (t && !/^[\[{]/.test(t)) return {pos: 0, kind: 'prefix'};
+  try { value(); ws(); if (i < t.length) fail('extra'); return null; } catch (e) { return e && e.kind ? e : null; }
+}
+const JSON_FIXES = {
+  'trailing-comma': '「]」や「}」の直前に余分なカンマがあります。そのカンマを削除してください。',
+  'missing-comma': '項目やイベントの区切りのカンマが抜けています。前の項目（または前の { }）の後ろに「,」を入れてください。',
+  'single-quote': '文字列や項目名が「\'」で囲まれています。JSONでは「"」で囲んでください。',
+  'comment': 'JSONにはコメント（// や /* */）を書けません。削除してください。',
+  'eof': 'JSONが途中で終わっています。AIの出力が途中で切れた可能性があります。最後まで出力し直してもらってください。',
+  'key': '項目名は「"」で囲んでください（例："path"）。',
+  'colon': '項目名の後ろに「:」がありません。',
+  'newline-in-string': '文字列の途中で改行しています。文字列は1行で書くか、改行を \\n にしてください。',
+  'value': '値の書き方が違います。文字列は「"」で囲み、数値・true・false・null はそのまま書いてください。',
+  'extra': 'JSONの終わりの後ろに余分な文字があります。説明文などを削除し、[ … ] だけにしてください。',
+  'prefix': 'JSONの前に説明文などがあります。「[」から始まるJSONの部分だけを貼り付けてください。'
+};
+
+// JSONとして読めない時は、行・列とその行の内容、よくある原因を示す
+function parseJsonText(text, label, fileName) {
+  let t = String(text || '').replace(/^﻿/, '').trim();
+  const where = label + (fileName ? '（' + fileName + '）' : '');
+  if (!t) throw new InputError([{level: 'error', where, msg: label + 'が空です。', fix: 'ファイルを選ぶか、JSONを貼り付けてください。'}]);
+  const fence = t.match(/^```[a-zA-Z]*\s*\n([\s\S]*?)\n```\s*$/);
+  if (fence) t = fence[1].trim();
+  try { return JSON.parse(t); } catch (e) {
+    if (label === '行動ログ') { try { return t.split(/\r?\n/).filter(Boolean).map(l => JSON.parse(l)); } catch {} }
+    const found = locateJsonError(t);
+    let loc = '', fix = 'JSONの書き方の誤りを直してください（' + e.message + '）。';
+    if (found) {
+      const pos = Math.min(found.pos, t.length), before = t.slice(0, pos), line = before.split('\n').length, col = pos - before.lastIndexOf('\n');
+      const lineText = (t.split('\n')[line - 1] || '').trim();
+      loc = line + '行目 ' + col + '文字目付近' + (lineText ? '：' + (lineText.length > 80 ? lineText.slice(0, 80) + '…' : lineText) : '');
+      fix = JSON_FIXES[found.kind] || fix;
+    }
+    throw new InputError([{level: 'error', where, msg: 'JSONとして読み取れません。' + (loc ? '（' + loc + '）' : ''), fix}]);
+  }
+}
+
+function buildModel(user, events) {
+  const issues = [];
+  const add = (level, idx, msg, fix, group) => issues.push({level, idx, msg, fix, group: group || msg + '|' + fix});
+  if (!Array.isArray(events) && events && Array.isArray(events.events)) events = events.events;
+  if (!Array.isArray(events)) throw new InputError([{level: 'error', where: '行動ログ', msg: '行動ログがイベントの配列（[ … ]）ではありません。', fix: '全体を [ ] で囲み、1件の行動を1つの { } にして並べてください。'}]);
+  if (!events.length) throw new InputError([{level: 'error', where: '行動ログ', msg: '行動ログにイベントが1件もありません。', fix: '1件以上のイベントを入れてください。'}]);
+  if (user == null || typeof user !== 'object' || Array.isArray(user)) { add('warn', null, 'ユーザー情報が { } のオブジェクトではありません。', 'user.json の中身（{ "user_id": … }）を指定してください。'); user = {}; }
+  const n = events.length;
+  const uid = user.user_id || (events[0] && events[0].user_id);
+  const tz = user.timezone || 'Asia/Tokyo';
+  const nameIndex = ec && ec.products.size ? new Map([...ec.products.values()].map(p => [p.product_name, p])) : null;
+
+  // 1) 形式の確認（ここで error があれば表示しない。ただし内容の確認も続けて、一度に全部伝える）
+  const view = events.map((r, i) => {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) { add('error', i, 'イベントが { } のオブジェクトではありません。', '1件の行動を1つの { } にしてください。'); return null; }
+    const sa = r.site_activities && typeof r.site_activities === 'object' ? r.site_activities : null;
+    if (!sa) {
+      if ('event_name' in r || 'event_params' in r) add('error', i, 'event_name・event_params がイベントの直下にあります。', '"site_activities": { "event_name": …, "event_params": { … } } の中に入れてください。');
+      else add('error', i, 'site_activities がありません。', '"site_activities": { "event_name": …, "event_params": { … } } を入れてください。');
+    }
+    const name = sa ? sa.event_name : r.event_name;
+    const p = (sa ? sa.event_params : r.event_params) || {};
+    if (typeof p !== 'object' || Array.isArray(p)) add('error', i, 'event_params が { } のオブジェクトではありません。', 'event_params を { "path": … } の形にしてください。');
+    if (typeof name !== 'string' || !name) add('error', i, 'event_name がありません。', 'イベント名（例："view_item"）を入れてください。');
+    else if (!REQUIRED[name]) { const s = suggestEvent(name, p, r); add('error', i, 'イベント名「' + name + '」は使えません。', s ? '「' + s + '」にしてください。' : '使えるイベント名：' + Object.keys(REQUIRED).join(', '), 'event:' + name + '|' + s); }
+    for (const k of Object.keys(r)) if (!TOP_KEYS.includes(k) && !(k === 'event_name' || k === 'event_params'))
+      add('error', i, 'イベントの直下に不要な項目「' + k + '」があります。', k === 'page' ? 'event_params.path に移してください（例："path": "/"）。' : (EXTRA_HINTS[k] ? EXTRA_HINTS[k] + '（直下ではなく event_params 側の扱い）' : '削除してください。'), 'top:' + k);
+    let date = null;
+    if (typeof r.timestamp !== 'string') add('error', i, 'timestamp がありません。', 'UTCの "YYYY-MM-DD HH:mm:ss" で入れてください（例："2026-10-07 12:30:00"）。');
+    else if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(r.timestamp) && !isNaN(toDate(r.timestamp))) date = toDate(r.timestamp);
+    else {
+      const d = new Date(r.timestamp);
+      if (!isNaN(d) && /\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(r.timestamp)) {
+        date = /[zZ]|[+-]\d{2}:?\d{2}$/.test(r.timestamp) ? d : null;
+        const ex = date ? '（例：「' + r.timestamp + '」→「' + utcString(date) + '」）' : '';
+        add('error', i, 'timestamp「' + r.timestamp + '」の形式が違います。', 'UTCの "YYYY-MM-DD HH:mm:ss" にしてください。「T」・末尾の「Z」・「+09:00」・ミリ秒は付けません。日本時間で書いた場合は9時間引きます' + ex + '。', 'ts-format');
+      } else add('error', i, 'timestamp「' + r.timestamp + '」を日時として読めません。', 'UTCの "YYYY-MM-DD HH:mm:ss" にしてください（例："2026-10-07 12:30:00"）。', 'ts-bad');
+    }
+    return {r, name: typeof name === 'string' ? name : '', p: p && typeof p === 'object' ? p : {}, date};
+  });
+
+  // 2) 内容の確認とカートの計算
+  let cart = new Map(), wish = new Map(), bought = [], txs = new Set(), prices = new Map();
+  const states = [];
+  const checkItem = (i, it, need, label) => {
+    const miss = need.filter(k => it[k] == null || it[k] === '');
+    if (miss.length) add('warn', i, label + 'に必須項目 ' + miss.join(', ') + ' がありません。', miss.map(k => k + '：' + FIELD_HINTS[k]).join(' / ') + ' を入れてください。');
+    if (it.item_id != null) {
+      // item_id は product-light.json の番号（1〜604の整数）
+      const hint = x => '商品名「' + x.product_name + '」の product_id は ' + x._short + ' です（tax_rate_percent は ' + taxOf(x) + '、税込 ' + fmt(x.price) + '円なので price は ' + netOf(x.price, taxOf(x)) + '、spec_id は 1）。';
+      const hit = nameIndex && nameIndex.get(it.item_name), prod = prodOf(it.item_id);
+      const isInt = Number.isInteger(it.item_id) && it.item_id >= 1;
+      if (!isInt && /^\d+$/.test(String(it.item_id))) add('warn', i, 'item_id「"' + it.item_id + '"」が文字列になっています。', '「"」を外して数値 ' + it.item_id + ' にしてください。', 'idstr');
+      else if (!isInt) add('warn', i, 'item_id「' + it.item_id + '」は product-light.json の product_id（1〜604の整数）ではありません。',
+        (hit || prod) ? hint(hit || prod) : 'product-light.json を商品名で検索し、その product_id（整数）に直してください。商品名・価格も product-light.json の値に合わせ、推測で作らないでください。', 'id:' + it.item_id);
+      if (nameIndex && /^\d+$/.test(String(it.item_id))) {
+        if (!prod) add('warn', i, 'item_id ' + it.item_id + ' の商品は product-light.json にありません。', hit ? hint(hit) : 'product-light.json を商品名で検索し、その product_id に直してください。', 'noid:' + it.item_id);
+        else {
+          if (prod.product_name !== it.item_name) add('warn', i, 'item_id ' + it.item_id + ' の商品名は「' + prod.product_name + '」で、ログの「' + it.item_name + '」と違います。',
+            hit ? 'ログの商品名が正しければ、item_id を ' + hit._short + ' にしてください。item_id が正しければ、item_name を "' + prod.product_name + '" にしてください。' : 'item_name を "' + prod.product_name + '" にしてください。', 'nm:' + it.item_id + it.item_name);
+          if (it.spec_id != null && it.spec_id !== 1) add('warn', i, prod.product_name + ' の spec_id が ' + it.spec_id + ' になっています。', 'spec_id は常に 1 にしてください。', 'sp:' + it.spec_id);
+          const rate = taxOf(prod), gross = grossOf(prod, 1), net = netOf(gross, rate);
+          // ID と商品名が別の商品を指す時は、どちらが正しいか決まらないので価格・税率は判定しない
+          if (prod.product_name === it.item_name || !hit) {
+            if (it.tax_rate_percent != null && it.tax_rate_percent !== rate) add('warn', i, prod.product_name + ' の税率が ' + it.tax_rate_percent + '% になっています。', rate + ' にしてください（' + (rate === 8 ? '食品' : '食品以外') + '）。', 'tx:' + it.item_id);
+            if (it.price != null && it.price !== net) add('warn', i, prod.product_name + ' の price が ' + it.price + ' になっています。', '税抜単価 ' + net + ' にしてください（税込 ' + gross + '円 × 100 ÷ ' + (100 + rate) + ' を切り捨て）。', 'pr:' + it.item_id + it.price);
+          }
+        }
+      }
+    }
+    if (it.price != null && (!Number.isInteger(it.price) || it.price < 0)) add('warn', i, (it.item_name || it.item_id) + ' の price が0以上の整数ではありません。', '税抜単価を整数で入れてください。');
+    if (it.tax_rate_percent != null && ![8, 10].includes(it.tax_rate_percent)) add('warn', i, (it.item_name || it.item_id) + ' の tax_rate_percent が 8 か 10 ではありません。', FIELD_HINTS.tax_rate_percent + ' にしてください。');
+    const k = key(it), prev = prices.get(k);
+    if (prev && it.price != null && (prev.price !== it.price || prev.name !== it.item_name)) add('warn', i, it.item_name + ' の商品名・価格が前のイベントと違います。', '同じ商品・規格では同じ値にしてください。', 'same:' + k);
+    if (!prev) prices.set(k, {price: it.price, name: it.item_name});
+  };
+  view.forEach((v, i) => {
+    if (!v) { states.push({cart: [...cart.values()], wish: [...wish.values()], bought: bought.slice(), cartDelta: 0}); return; }
+    const {r, name, p, date} = v;
+    if (r.user_id == null) add('warn', i, 'user_id がありません。', '"' + (uid || 'user.json の user_id') + '" を入れてください。');
+    else if (r.user_id !== uid) add('warn', i, 'user_id「' + r.user_id + '」が「' + uid + '」と違います。', '全イベントで user.json の user_id と同じ値にしてください。');
+    if (typeof r.reason_for_the_action !== 'string' || !r.reason_for_the_action.trim()) add('warn', i, 'reason_for_the_action（行動の理由）がありません。', '人物像とそのとき見えている情報に基づく理由を1〜2文で入れてください。');
+    const prevDate = i > 0 && view[i - 1] && view[i - 1].date;
+    if (date && prevDate && date <= prevDate) add('warn', i, '時刻が前の行動と同じか、前の行動より早くなっています。', '古い順に並べ、同じ時刻を作らないでください。');
+    if (name === 'leave_site' && i !== n - 1) add('warn', i, 'leave_site（離脱）の後に行動があります。', 'leave_site は最後の1件だけにしてください。');
+    const req = REQUIRED[name];
+    if (req) {
+      // 直下の page は別の項目で「path に移す」と伝えるので、ここでは数えない
+      const miss = req.filter(k => (p[k] == null || p[k] === '') && !(k === 'path' && r.page != null));
+      if (miss.length) add('warn', i, 'event_params に必須項目 ' + miss.join(', ') + ' がありません。', miss.map(k => k + '：' + FIELD_HINTS[k]).join(' / ') + ' を入れてください。');
+      const extra = Object.keys(p).filter(k => p[k] != null && !req.includes(k) && !OPTIONAL.includes(k));
+      for (const k of extra) add('warn', i, name + ' に不要な項目「' + k + '」があります。', EXTRA_HINTS[k] || 'このイベントでは使わないので削除してください。', 'extra:' + name + k);
+    }
+    if (typeof p.path === 'string') {
+      if (!p.path.startsWith('/') || /\s/.test(p.path)) add('warn', i, 'path「' + p.path + '」がサイト内のpathになっていません。', '空白なしで「/」から始めてください' + (suggestPath(p.path) ? '（' + suggestPath(p.path) + '）' : '') + '。');
+      else if (suggestPath(p.path)) add('warn', i, 'path「' + p.path + '」はこのサイトにないページです。', '「' + suggestPath(p.path) + '」にしてください。', 'path:' + p.path.replace(/\d+|[0-9a-f-]{36}/g, '#'));
+      else if (['view_item', 'add_to_cart', 'add_to_wishlist'].includes(name) && p.item_id != null && p.path !== '/items/' + p.item_id)
+        add('warn', i, 'path「' + p.path + '」が商品（item_id ' + p.item_id + '）のページと合っていません。', '「/items/' + p.item_id + '」にしてください。', 'itempath');
+    }
+    if (p.item_id != null || ['view_item', 'add_to_cart', 'remove_from_cart', 'add_to_wishlist'].includes(name)) checkItem(i, p, [], '');
+    const items = Array.isArray(p.items) ? p.items : [];
+    if (p.items != null && !Array.isArray(p.items)) add('warn', i, 'items が配列ではありません。', FIELD_HINTS.items + ' にしてください。');
+    const needInItems = ['view_cart', 'begin_checkout', 'purchase'].includes(name) ? [...ITEM, 'quantity'] : name === 'view_wishlist' ? ITEM : [];
+    items.forEach(it => {
+      if (!it || typeof it !== 'object') return;
+      checkItem(i, it, needInItems, 'items の「' + (it.item_name || it.item_id) + '」');
+      for (const k of Object.keys(it)) if (![...ITEM, 'quantity', ...OPTIONAL].includes(k)) add('warn', i, 'items の要素に不要な項目「' + k + '」があります。', EXTRA_HINTS[k] || '削除してください。', 'iextra:' + k);
+    });
+    if (new Set(items.map(key)).size !== items.length) add('warn', i, 'items に同じ商品・規格が重複しています。', '数量（quantity）をまとめて1行にしてください。');
+    if (p.shipping_address && typeof p.shipping_address === 'object') {
+      const a = p.shipping_address, miss = ADDRESS_KEYS.filter(k => !(k in a)), extra = Object.keys(a).filter(k => !ADDRESS_KEYS.includes(k));
+      if (miss.length || extra.length) add('warn', i, 'shipping_address の項目が違います' + (miss.length ? '（不足：' + miss.join(', ') + '）' : '') + (extra.length ? '（不要：' + extra.join(', ') + '）' : '') + '。', FIELD_HINTS.shipping_address + ' をそのまま使ってください。');
+    }
+    if (ec && ec.blogs.size && name === 'view_article' && p.article_id != null) { const b = ec.blogs.get(Number(p.article_id)); if (!b) add('warn', i, '記事ID ' + p.article_id + ' が blog.json にありません。', 'blog.json の blog_id を使ってください。'); else if (b.title !== p.article_title) add('warn', i, 'article_title が blog.json と違います。', '"' + b.title + '" にしてください。'); }
+    if (ec && ec.news.size && name === 'view_news' && p.news_id != null) { const b = ec.news.get(Number(p.news_id)); if (!b) add('warn', i, 'お知らせID ' + p.news_id + ' が news.json にありません。', 'news.json の id を使ってください。'); else if (b.title !== p.news_title) add('warn', i, 'news_title が news.json と違います。', '"' + b.title + '" にしてください。'); }
+
+    const cartList = () => [...cart.values()];
+    const same = (a, b) => a.length === b.length && a.every(x => { const y = b.find(z => key(z) === key(x)); return y && y.quantity === x.quantity; });
+    const before = qty(cartList());
+    if (name === 'add_to_cart' && p.item_id != null) {
+      const q = Number.isInteger(p.quantity) && p.quantity > 0 ? p.quantity : 1, c = cart.get(key(p));
+      cart.set(key(p), {...pick(p), quantity: (c ? c.quantity : 0) + q});
+    } else if (name === 'remove_from_cart' && p.item_id != null) {
+      const c = cart.get(key(p));
+      if (!c) add('warn', i, 'カートにない商品（' + (p.item_name || p.item_id) + '）を削除しています。', '削除する商品は、先に add_to_cart で入れたものと item_id・spec_id を同じにしてください。');
+      else { const left = c.quantity - (p.quantity || c.quantity); left > 0 ? cart.set(key(p), {...c, quantity: left}) : cart.delete(key(p)); }
+    } else if (name === 'add_to_wishlist' && p.item_id != null) {
+      wish.set(key(p), pick(p));
+    } else if (name === 'view_cart' || name === 'begin_checkout') {
+      if (!same(items, cartList())) add('warn', i, 'items が、それまでの add_to_cart・remove_from_cart から計算したカートの中身と一致しません。', 'その時点のカート全体（' + (cartList().map(x => x.item_name + '×' + x.quantity).join('、') || '空') + '）にしてください。');
+      cart = new Map(items.map(it => [key(it), {...pick(it), quantity: it.quantity}]));
+    } else if (name === 'purchase') {
+      if (p.transaction_id != null && txs.has(p.transaction_id)) add('warn', i, '注文番号 ' + p.transaction_id + ' が重複しています。', '注文ごとに別の transaction_id にしてください。');
+      txs.add(p.transaction_id);
+      if (new Set(items.map(x => x.tax_rate_percent)).size > 1) add('warn', i, '1つの注文に8%と10%の商品が混在しています。', '税率ごとに purchase を分け、別の transaction_id にしてください。');
+      for (const it of items) {
+        const c = cart.get(key(it));
+        if (!c || c.quantity < it.quantity) add('warn', i, it.item_name + ' がカートにない、または数量が足りません。', '購入する商品は先に add_to_cart でカートに入れてください。');
+        else c.quantity === it.quantity ? cart.delete(key(it)) : cart.set(key(it), {...c, quantity: c.quantity - it.quantity});
+        bought.push({...pick(it), quantity: it.quantity, transaction_id: p.transaction_id});
+      }
+    }
+    states.push({cart: cartList(), wish: [...wish.values()], bought: bought.slice(), cartDelta: qty(cartList()) - before});
+  });
+  const lastName = view[n - 1] && view[n - 1].name;
+  if (lastName && lastName !== 'leave_site') add('warn', null, '最後の行動が leave_site（離脱）ではありません。', '最後に { "event_name": "leave_site", "event_params": { "path": 最後のページ } } を追加してください。出力が途中で切れていないかも確認してください。');
+  if (user.user_id && events[0] && events[0].user_id != null && events[0].user_id !== user.user_id) add('warn', null, 'user.json の user_id「' + user.user_id + '」と行動ログの user_id が違います。', 'どちらかに合わせてください。');
+
+  const grouped = groupIssues(issues, n);
+  if (grouped.some(x => x.level === 'error')) throw new InputError(grouped);
+  const end = states[states.length - 1];
+  const outcome = end.bought.length ? '購入して離脱' : end.cart.length ? 'カートに残して離脱' : '購入なしで離脱';
+  return {user, events, states, issues: grouped, tz, outcome};
+}
+
+// 同じ問題をまとめ、対象のイベント番号を「1〜3, 5件目」「全14件」の形にする
+function groupIssues(issues, n) {
+  const map = new Map();
+  for (const x of issues) {
+    const g = map.get(x.group);
+    if (g) { if (x.idx != null && !g.idx.includes(x.idx)) g.idx.push(x.idx); }
+    else map.set(x.group, {level: x.level, msg: x.msg, fix: x.fix, where: x.where, idx: x.idx != null ? [x.idx] : []});
+  }
+  const out = [...map.values()];
+  for (const g of out) if (!g.where) g.where = g.idx.length ? rangeText(g.idx, n) : '全体';
+  return out.sort((a, b) => (a.level === b.level ? 0 : a.level === 'error' ? -1 : 1));
+}
+function rangeText(idx, n) {
+  const s = [...idx].sort((a, b) => a - b);
+  if (s.length === n && n > 1) return '全' + n + '件';
+  const parts = [];
+  for (let i = 0; i < s.length; i++) {
+    let j = i; while (j + 1 < s.length && s[j + 1] === s[j] + 1) j++;
+    parts.push(j > i ? (s[i] + 1) + '〜' + (s[j] + 1) : String(s[i] + 1)); i = j;
+  }
+  return parts.join(', ') + '件目';
+}
+
+// Web版のAIなどに、そのまま貼って修正してもらうための依頼文
+const FORMAT_SPEC = `- 全体はイベントの JSON 配列。1件の形：
+  {"user_id": "…", "timestamp": "YYYY-MM-DD HH:mm:ss（UTC。T・Z・+09:00は付けない）", "site_activities": {"event_name": "…", "event_params": {…}}, "reason_for_the_action": "行動の理由"}
+- イベントの直下に置けるのは user_id, timestamp, site_activities, reason_for_the_action だけ。
+- 「単一商品」= item_id（product-light.json の product_id。1〜604の整数で、""で囲まない）, item_name（product_name）, price（税抜単価 = floor(税込×100÷(100+税率))）, tax_rate_percent（categories の1つ目が「食品」なら8、それ以外は10）, spec_id（常に 1）
+- イベント名と event_params の必須項目（これ以外の項目は入れない）：
+  view_top: path / view_category_list: path / filter_items: path（/items?category[]={ID}）, filter_type（"category"）, filter_value（IDの文字列）
+  sort_items: path, sort_type（price_low_to_high か price_high_to_low） / search: path（/items?q={語}）, search_term
+  view_item: path（/items/{item_id}。例：/items/464）, 単一商品 / add_to_cart: path, 単一商品, quantity / remove_from_cart: path（/cart）, 単一商品, quantity
+  add_to_wishlist: path, 単一商品 / view_wishlist: path, items（各要素は単一商品）
+  view_cart: path（/cart）, items / begin_checkout: path（/checkout）, items / purchase: path（/checkout/complete）, transaction_id, items, shipping_address
+  （items の各要素 = 単一商品 + quantity。その時点のカート全体と一致させる）
+  view_blog_list: path（/blogs） / view_article: path（/blogs/{blog_id}）, article_id, article_title
+  view_news_list: path（/news） / view_news: path（/news/{id}）, news_id, news_title / leave_site: path（最後のページ）
+- shipping_address は {"label": "自宅", "prefecture": "東京都", "postal_code": "100-0000", "address1": "千代田区架空町1-2-3", "address2": null} をそのまま使う。
+- 最後の1件だけ leave_site。時刻は古い順で同じ時刻を作らない。全件の user_id を同じにする。`;
+function fixRequest(issues, label, sourceText) {
+  const list = issues.map((x, i) => (i + 1) + '. 【' + x.where + '】' + x.msg + '\n   直し方：' + x.fix).join('\n');
+  return '次の' + label + 'を、決められた形式に合わせて直してください。\n'
+    + '「見つかった問題」をすべて直し、直した JSON 全体を1つのコードブロックで出力してください。省略せず最後のイベントまで出力してください。\n'
+    + '商品の item_id・item_name・価格・税率は product-light.json の実在の値を使い、推測で作らないでください。product-light.json を参照できない場合は、その旨を伝えてください。\n\n'
+    + '## 見つかった問題（' + issues.length + '種類）\n' + list + '\n\n'
+    + '## 正しい形式\n' + FORMAT_SPEC + '\n\n'
+    + '## 直す対象の' + label + '\n' + String(sourceText || '').trim() + '\n';
+}
+
+function fmtTime(ts, withDate) {
+  const o = {timeZone: model.tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false};
+  if (withDate) Object.assign(o, {year: 'numeric', month: 'long', day: 'numeric', weekday: 'short'});
+  try { return new Intl.DateTimeFormat('ja-JP', o).format(toDate(ts)); } catch { return ts + ' UTC'; }
+}
+
+/* ---------- 右側：ページの再現 ---------- */
+function productPage(p, specId, banner) {
+  const wrap = document.createDocumentFragment();
+  if (banner) wrap.append(banner);
+  const prod = prodOf(p.item_id);
+  if (!prod) {
+    wrap.append(el('p', p.item_name, 'pname'), el('p', '税抜 ' + fmt(p.price) + '円 · 税率' + p.tax_rate_percent + '% · 規格ID ' + p.spec_id, 'small'), noData('商品'));
+    return wrap;
+  }
+  const cats = (prod.categories || []).map(c => c.category_name).filter(Boolean);
+  if (cats.length) wrap.append(el('p', 'ホーム › ' + cats.join(' › '), 'crumbs'));
+  const box = el('div', null, 'prod'), gal = el('div', null, 'gallery'), urls = productImages(prod);
+  gal.append(img(urls[0], prod.product_name, 'pimg'));
+  if (urls.length > 1) { const th = el('div', null, 'thumbs'); urls.slice(1, 6).forEach(u => th.append(img(u, '', 'pimg'))); gal.append(th); }
+  const info = el('div', null, 'stack'); info.style.gap = '10px';
+  const price = el('p', '¥' + fmt(grossOf(prod, specId)), 'pprice'); price.append(el('small', '税込（税率' + taxOf(prod) + '%）'));
+  info.append(el('p', prod.product_name, 'pname'), price, el('p', prod.description || '', 'desc'));
+  if (prod.detailed_description) info.append(el('p', prod.detailed_description, 'desc small'));
+  box.append(gal, info); wrap.append(box);
+  const specs = prod.product_specifications || [];
+  if (specs.length) {
+    const sc = el('div'); sc.style.overflowX = 'auto';
+    const t = el('table', null, 'specs'), hd = el('tr');
+    ['規格', '色', 'サイズ', '価格（税込）', '属性'].forEach(h => hd.append(el('th', h))); t.append(hd);
+    for (const s of specs) {
+      const tr = el('tr', null, s.spec_id === specId ? 'sel' : '');
+      tr.append(el('td', String(s.spec_id) + (s.spec_id === specId ? '（選択）' : '')), el('td', s.color || ''), el('td', s.size || ''),
+        el('td', '¥' + fmt(s.price != null ? s.price : prod.price)), el('td', (s.attributes || []).map(a => a.key + '：' + a.value).join(' / ')));
+      t.append(tr);
+    }
+    sc.append(t); wrap.append(sc);
+  }
+  return wrap;
+}
+function articlePage(item, kind) {
+  const wrap = document.createDocumentFragment();
+  const date = kind === 'blog' ? item.publish_date : item.published_at;
+  wrap.append(el('p', [kind === 'blog' ? 'ブログ' : 'お知らせ', item.news_type, date].filter(Boolean).join(' · '), 'crumbs'), el('p', item.title, 'atitle'));
+  const body = el('div', null, 'article'); body.append(safeBody(item.body)); wrap.append(body);
+  const prod = item.product_id != null ? prodOf(item.product_id) : null;
+  if (item.product_id != null) {
+    const card = el('div', null, 'linkcard');
+    card.append(img(prod ? productImages(prod)[0] : null, prod ? prod.product_name : '', 'pimg'));
+    const t = el('div'); t.append(el('p', kind === 'blog' ? 'この記事で紹介した商品' : '関連商品', 'small'), el('p', prod ? prod.product_name + ' ¥' + fmt(prod.price) : '商品ID ' + item.product_id, 'item-name'));
+    card.append(t); wrap.append(card);
+  }
+  return wrap;
+}
+function listPage(p, name) {
+  const wrap = document.createDocumentFragment();
+  const q = new URLSearchParams((p.path || '').split('?')[1] || '');
+  const cat = q.get('category[]') || (name === 'filter_items' ? p.filter_value : null);
+  const term = name === 'search' ? p.search_term : q.get('q');
+  const sort = q.get('sort') || p.sort_type;
+  let list = ec && ec.products.size ? [...ec.products.values()] : null, catName = cat;
+  if (list && cat) {
+    list = list.filter(x => (x.categories || []).some(c => String(c.category_id1 ?? c.category_id2 ?? c.category_id3) === String(cat)));
+    const hit = list[0] && list[0].categories.find(c => String(c.category_id1 ?? c.category_id2 ?? c.category_id3) === String(cat));
+    if (hit) catName = hit.category_name;
+  }
+  if (list && term) list = list.filter(x => x.product_name.includes(term));
+  if (list && sort === 'price_low_to_high') list.sort((a, b) => a.price - b.price);
+  if (list && sort === 'price_high_to_low') list.sort((a, b) => b.price - a.price);
+  if (list && sort === 'newest') list.sort((a, b) => String(b.sales_start_date).localeCompare(String(a.sales_start_date)));
+  const conds = [cat && 'カテゴリ：' + catName, term != null && '検索語：「' + term + '」', sort && '並び順：' + (SORTS[sort] || sort)].filter(Boolean);
+  wrap.append(el('p', conds.join(' · ') || '商品一覧', 'atitle'));
+  if (!list) { wrap.append(noData('一覧')); return wrap; }
+  if (!cat && term == null) { wrap.append(el('p', '条件なしの一覧は再現しません。', 'hint')); return wrap; }
+  const viewed = new Set(model.events.filter(r => r.site_activities.event_name === 'view_item').map(r => (prodOf(r.site_activities.event_params.item_id) || {}).product_id));
+  wrap.append(el('p', list.length + '件' + (list.length > 24 ? '（先頭24件を表示）' : '') + '。枠付きはこのセッションで詳細を開いた商品です。', 'hint'));
+  const cards = el('div', null, 'cards');
+  for (const x of list.slice(0, 24)) {
+    const c = el('div', null, 'card' + (viewed.has(x.product_id) ? ' hit' : ''));
+    c.append(img(productImages(x)[0], x.product_name, 'pimg'), el('span', x.product_name), el('b', '¥' + fmt(x.price)));
+    cards.append(c);
+  }
+  wrap.append(cards);
+  return wrap;
+}
+function linesPage(p, name) {
+  const wrap = document.createDocumentFragment(), items = p.items || [];
+  const heads = {view_cart: 'カート', begin_checkout: 'ご注文内容の確認', purchase: 'ご注文ありがとうございました', view_wishlist: 'お気に入り'};
+  wrap.append(el('p', heads[name], 'atitle'));
+  if (name === 'purchase') wrap.append(el('p', '注文番号 ' + p.transaction_id, 'mono'));
+  const sc = el('div'); sc.style.overflowX = 'auto';
+  const t = el('table', null, 'lines'), hd = el('tr');
+  ['商品', '税抜単価', '数量', '小計（税抜）'].forEach((h, i) => hd.append(el('th', h, i ? 'n' : ''))); t.append(hd);
+  for (const it of items) {
+    const tr = el('tr'), prod = prodOf(it.item_id), spec = prod && (prod.product_specifications || []).find(s => s.spec_id === it.spec_id);
+    const nm = el('td'); nm.append(el('span', it.item_name, 'item-name'), el('br'), el('span', [spec && spec.color, spec && spec.size, '税率' + it.tax_rate_percent + '%'].filter(Boolean).join(' · '), 'small'));
+    tr.append(nm, el('td', fmt(it.price) + '円', 'n'), el('td', it.quantity != null ? String(it.quantity) : '—', 'n'), el('td', it.quantity != null ? fmt(it.price * it.quantity) + '円' : '—', 'n'));
+    t.append(tr);
+  }
+  sc.append(t); wrap.append(sc);
+  if (name !== 'view_wishlist') wrap.append(el('p', '合計 ' + qty(items) + '点 · 税抜 ' + fmt(sum(items)) + '円', 'total'));
+  if (p.shipping_address) { const a = p.shipping_address; wrap.append(el('p', 'お届け先：' + [a.label, '〒' + a.postal_code, a.prefecture + a.address1, a.address2].filter(Boolean).join(' '), 'small')); }
+  return wrap;
+}
+function topPage() {
+  const wrap = document.createDocumentFragment();
+  wrap.append(el('p', 'トップページ', 'atitle'));
+  const tops = categoryTree().map(t => t.name);
+  if (tops.length) { const d = el('div'); d.append(el('h3', 'カテゴリ')); const chips = el('div', null, 'chips-row'); tops.forEach(n => chips.append(el('span', n, 'cat-chip'))); d.append(chips); wrap.append(d); }
+  if (!ec || (!ec.blogs.size && !ec.news.size)) { wrap.append(el('p', '新着ブログ・お知らせはデータを読み込むと表示します。', 'hint')); return wrap; }
+  const sec = (label, list, dateKey) => { if (!list.length) return; const d = el('div'); d.append(el('h3', label)); const ul = el('ul'); ul.style.margin = '0'; ul.style.paddingLeft = '18px'; list.forEach(x => ul.append(el('li', x.title + '（' + x[dateKey] + '）'))); d.append(ul); wrap.append(d); };
+  sec('新着ブログ', [...ec.blogs.values()].sort((a, b) => String(b.publish_date).localeCompare(String(a.publish_date))).slice(0, 3), 'publish_date');
+  sec('新着お知らせ', [...ec.news.values()].sort((a, b) => String(b.published_at).localeCompare(String(a.published_at))).slice(0, 3), 'published_at');
+  return wrap;
+}
+function noData(what) {
+  const d = el('p', null, 'hint');
+  d.textContent = ec && ec.source === 'embedded' ? 'この' + what + 'のデータはHTMLに含まれていません。' : what + 'ページを再現するデータが読み込めていません。ビューアと同じフォルダに ec-data.js があるか確認してください。';
+  return d;
+}
+// カテゴリの木（第1階層 → 第2階層）。カテゴリデータが無ければ商品のカテゴリから組み立てる
+function categoryTree() {
+  if (!ec) return [];
+  if (ec.categories.length) {
+    return ec.categories.filter(c => c.category_hierarchy_level === 1).map(t => ({id: t.category_id, name: t.category_name,
+      children: ec.categories.filter(c => c.parent_category_id === t.category_id).map(c => ({id: c.category_id, name: c.category_name}))}));
+  }
+  const tree = new Map();
+  for (const p of ec.products.values()) {
+    const [a, b] = p.categories || []; if (!a) continue;
+    const id = a.category_id1 ?? a.category_name;
+    if (!tree.has(id)) tree.set(id, {id, name: a.category_name, children: new Map()});
+    if (b) tree.get(id).children.set(b.category_id2 ?? b.category_name, {id: b.category_id2, name: b.category_name});
+  }
+  return [...tree.values()].map(t => ({...t, children: [...t.children.values()]}));
+}
+// このセッションで、このページの後に開いたもの（一覧で印を付ける）
+const openedLater = (eventName, key) => new Set(model.events.filter(r => r.site_activities.event_name === eventName).map(r => Number(r.site_activities.event_params[key])));
+function categoryListPage() {
+  const wrap = document.createDocumentFragment(), tree = categoryTree();
+  wrap.append(el('p', 'カテゴリ一覧', 'atitle'));
+  if (!tree.length) { wrap.append(noData('カテゴリ')); return wrap; }
+  const filtered = new Set(model.events.filter(r => r.site_activities.event_name === 'filter_items').map(r => String(r.site_activities.event_params.filter_value)));
+  if (filtered.size) wrap.append(el('p', '枠付きは、このセッションで絞り込みに使ったカテゴリです。', 'hint'));
+  for (const t of tree) {
+    const d = el('div', null, 'cat-group'); d.append(el('h3', t.name + (filtered.has(String(t.id)) ? '（絞り込みに使用）' : '')));
+    const chips = el('div', null, 'chips-row');
+    t.children.forEach(c => chips.append(el('span', c.name, 'cat-chip' + (filtered.has(String(c.id)) ? ' hit' : ''))));
+    d.append(chips); wrap.append(d);
+  }
+  return wrap;
+}
+function blogListPage() {
+  const wrap = document.createDocumentFragment();
+  wrap.append(el('p', 'ブログ', 'atitle'));
+  if (!ec || !ec.blogs.size) { wrap.append(noData('ブログ一覧')); return wrap; }
+  const read = openedLater('view_article', 'article_id');
+  if (read.size) wrap.append(el('p', '「このあと読んだ」は、このセッションで開いた記事です。', 'hint'));
+  const ul = el('ul', null, 'rowlist');
+  for (const b of [...ec.blogs.values()].sort((a, c) => String(c.publish_date).localeCompare(String(a.publish_date)))) {
+    const li = el('li', null, read.has(Number(b.blog_id)) ? 'hit' : ''), text = el('div');
+    const head = el('p', null, 'row-title'); head.append(el('span', b.title)); if (read.has(Number(b.blog_id))) head.append(el('span', 'このあと読んだ', 'mark buy'));
+    text.append(head, el('p', b.publish_date, 'small'), el('p', b.blog_summary || '', 'row-sub'));
+    li.append(img(b.thumbnail_url, '', 'thumb'), text); ul.append(li);
+  }
+  wrap.append(ul);
+  return wrap;
+}
+function newsListPage() {
+  const wrap = document.createDocumentFragment();
+  wrap.append(el('p', 'お知らせ', 'atitle'));
+  if (!ec || !ec.news.size) { wrap.append(noData('お知らせ一覧')); return wrap; }
+  const read = openedLater('view_news', 'news_id');
+  if (read.size) wrap.append(el('p', '「このあと読んだ」は、このセッションで開いたお知らせです。', 'hint'));
+  const ul = el('ul', null, 'rowlist plain');
+  for (const n of [...ec.news.values()].sort((a, c) => String(c.published_at).localeCompare(String(a.published_at)))) {
+    const li = el('li', null, read.has(Number(n.id)) ? 'hit' : ''), text = el('div');
+    const head = el('p', null, 'row-title'); head.append(el('span', n.title)); if (read.has(Number(n.id))) head.append(el('span', 'このあと読んだ', 'mark buy'));
+    text.append(el('p', n.published_at + ' · ' + (n.news_type || ''), 'small'), head);
+    li.append(text); ul.append(li);
+  }
+  wrap.append(ul);
+  return wrap;
+}
+function genericPage(p) {
+  const dl = el('dl', null, 'params'), labels = {filter_type: '絞り込み軸', filter_value: '絞り込み値', sort_type: '並び順', search_term: '検索語'};
+  for (const [k, v] of Object.entries(p)) if (k !== 'path' && v != null && typeof v !== 'object') dl.append(el('dt', labels[k] || k), el('dd', String(v)));
+  return dl.childNodes.length ? dl : el('p', 'このページの内容は記録されていません。', 'hint');
+}
+function renderPage(name, p) {
+  const page = $('d-page'); page.replaceChildren();
+  const banner = {add_to_cart: ['カートに ' + (p.quantity || 1) + '点 入れた', ''], add_to_wishlist: ['お気に入りに追加した', 'info'], remove_from_cart: ['カートから ' + (p.quantity || '') + '点 削除した', 'info']}[name];
+  const b = banner ? el('p', banner[0], 'action ' + banner[1]) : null;
+  if (['view_item', 'add_to_cart', 'add_to_wishlist', 'remove_from_cart'].includes(name) && p.item_id) page.append(productPage(p, p.spec_id, b));
+  else if (name === 'view_article') { const a = ec && ec.blogs.get(Number(p.article_id)); page.append(a ? articlePage(a, 'blog') : el('p', p.article_title, 'atitle'), ...(a ? [] : [noData('記事')])); }
+  else if (name === 'view_news') { const a = ec && ec.news.get(Number(p.news_id)); page.append(a ? articlePage(a, 'news') : el('p', p.news_title, 'atitle'), ...(a ? [] : [noData('お知らせ')])); }
+  else if (['filter_items', 'sort_items', 'search', 'view_item_list'].includes(name)) page.append(listPage(p, name));
+  else if (['view_cart', 'begin_checkout', 'purchase', 'view_wishlist'].includes(name)) page.append(linesPage(p, name));
+  else if (name === 'view_top') page.append(topPage());
+  else if (name === 'view_category_list') page.append(categoryListPage());
+  else if (name === 'view_blog_list') page.append(blogListPage());
+  else if (name === 'view_news_list') page.append(newsListPage());
+  else if (name === 'leave_site') page.append(el('p', 'このページを最後にサイトを離れました。', 'hint'));
+  else page.append(genericPage(p));
+}
+
+function itemList(target, list, empty) {
+  target.replaceChildren();
+  if (!list.length) { target.append(el('p', empty, 'empty')); return; }
+  for (const it of list) {
+    const box = el('div', null, 'item');
+    box.append(el('p', it.item_name, 'item-name'), el('p', '税抜 ' + fmt(it.price) + '円' + (it.quantity != null ? ' × ' + it.quantity : ''), 'small'));
+    target.append(box);
+  }
+  if (list[0].quantity != null) target.append(el('p', '合計 ' + qty(list) + '点 · 税抜 ' + fmt(sum(list)) + '円', 'total'));
+}
+
+function select(i, scroll) {
+  selected = i;
+  const r = model.events[i], name = r.site_activities.event_name, p = r.site_activities.event_params, s = model.states[i];
+  [...$('flow').children].forEach((li, j) => { li.classList.toggle('active', i === j); li.querySelector('button').setAttribute('aria-pressed', String(i === j)); });
+  $('d-label').textContent = '行動 ' + (i + 1) + ' / ' + model.events.length + ' · ' + fmtTime(r.timestamp, true) + '（UTC ' + r.timestamp + '）';
+  $('d-title').textContent = LABELS[name] || name;
+  $('d-reason').textContent = r.reason_for_the_action || '（理由の記録なし）';
+  $('d-path').textContent = p.path || '';
+  renderPage(name, p);
+  itemList($('d-cart'), s.cart, 'カートは空です。');
+  $('d-wish-box').hidden = !model.states.some(x => x.wish.length);
+  itemList($('d-wish'), s.wish, 'お気に入りはありません。');
+  itemList($('d-bought'), s.bought, 'まだ購入していません。');
+  $('d-raw').textContent = JSON.stringify(r, null, 2);
+  $('detail').scrollTop = 0;
+  if (scroll && matchMedia('(max-width:860px)').matches) $('detail').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+function subjectOf(name, p) {
+  if (p.item_name) return p.item_name;
+  if (p.article_title) return p.article_title;
+  if (p.news_title) return p.news_title;
+  if (p.search_term != null) return '「' + p.search_term + '」';
+  if (name === 'sort_items') return SORTS[p.sort_type] || p.sort_type;
+  if (name === 'filter_items') { const prod = ec && [...ec.products.values()].find(x => (x.categories || []).some(c => String(c.category_id1 ?? c.category_id2) === String(p.filter_value))); const c = prod && prod.categories.find(c => String(c.category_id1 ?? c.category_id2) === String(p.filter_value)); return c ? c.category_name : 'カテゴリID ' + p.filter_value; }
+  if (name === 'purchase') return '税抜 ' + fmt(sum(p.items || [])) + '円';
+  return p.path || '';
+}
+
+function setFileStatus() {
+  $('user-status').textContent = model && inputs.user.trim() ? '表示中：' + (model.user.nickname || model.user.user_id || '（名前なし）') : '未選択（無くても行動ログは表示できます）';
+  $('events-status').textContent = model ? '表示中：' + model.events.length + '件の行動' : '未選択';
+}
+
+function render(m, keep) {
+  model = m;
+  const u = m.user, prof = u.profile || {}, vc = prof.visit_context || {};
+  $('nickname').hidden = !u.nickname; $('nickname').textContent = u.nickname || '';
+  $('persona').textContent = u.persona || '人物像の説明はありません。';
+  const pf = $('profile'); pf.replaceChildren();
+  const addKV = (label, v) => {
+    if (v == null || v === '' || (Array.isArray(v) && !v.length)) return;
+    const box = el('div', null, 'kv'); box.append(el('h3', label));
+    if (Array.isArray(v)) { const ul = el('ul'); v.forEach(x => ul.append(el('li', String(x)))); box.append(ul); } else box.append(el('p', String(v)));
+    pf.append(box);
+  };
+  addKV('ユーザーID', u.user_id || m.events[0].user_id);
+  addKV('訪問の状況', [vc.datetime_jst && vc.datetime_jst + '（日本時間）', vc.device, vc.mood, vc.time_available && '使える時間：' + vc.time_available].filter(Boolean));
+  for (const [k, label] of PROFILE_LABELS) addKV(label, prof[k]);
+
+
+  const first = m.events[0], last = m.events[m.events.length - 1], end = m.states[m.states.length - 1];
+  const seen = new Set(m.events.filter(r => r.site_activities.event_name === 'view_item').map(r => r.site_activities.event_params.item_id));
+  const ov = $('overview'); ov.replaceChildren();
+  ov.append(el('span', fmtTime(first.timestamp, true) + ' 開始', 'badge'),
+    el('span', '滞在 ' + dur((toDate(last.timestamp) - toDate(first.timestamp)) / 1000), 'badge'),
+    el('span', m.events.length + '件の行動', 'badge'),
+    el('span', '商品詳細 ' + seen.size + '件を閲覧', 'badge'),
+    el('span', m.outcome + (end.bought.length ? '（税抜 ' + fmt(sum(end.bought)) + '円・' + qty(end.bought) + '点）' : ''), 'badge buy'));
+  if (m.issues.length) ov.append(el('span', '確認事項 ' + m.issues.length + '種類', 'badge warn'));
+  showProblems(m.issues, false);
+
+  $('tz').textContent = m.tz + ' で表示';
+  const flow = $('flow'); flow.replaceChildren();
+  m.events.forEach((r, i) => {
+    const name = r.site_activities.event_name, p = r.site_activities.event_params, s = m.states[i];
+    const li = el('li', null, 'step' + (['add_to_cart', 'begin_checkout', 'purchase'].includes(name) ? ' kind-buy' : ''));
+    const num = el('span', String(i + 1), 'num'); num.setAttribute('aria-hidden', 'true');
+    const b = el('button', null, 'step-btn'); b.type = 'button'; b.setAttribute('aria-pressed', 'false'); b.setAttribute('aria-controls', 'detail');
+    const top = el('span', null, 'step-top'), title = el('span', LABELS[name] || name, 'step-title');
+    if (s.cartDelta > 0) title.append(el('span', 'カート+' + s.cartDelta, 'mark buy'));
+    if (s.cartDelta < 0 && name !== 'purchase') title.append(el('span', 'カート' + s.cartDelta, 'mark'));
+    if (name === 'purchase') title.append(el('span', '購入', 'mark buy'));
+    if (m.issues.some(x => x.idx.includes(i))) title.append(el('span', '要確認', 'mark warn'));
+    top.append(title, el('span', fmtTime(r.timestamp), 'time'));
+    b.append(top, el('span', subjectOf(name, p), 'step-sub'));
+    b.addEventListener('click', () => select(i, true));
+    li.append(num, b);
+    if (i < m.events.length - 1) li.append(el('span', '↓ ' + dur((toDate(m.events[i + 1].timestamp) - toDate(r.timestamp)) / 1000), 'gap'));
+    flow.append(li);
+  });
+  $('result').hidden = false;
+  setFileStatus();
+  select(keep ? Math.min(selected, m.events.length - 1) : 0, false);
+}
+
+// 直近に選んだファイル名（エラー表示用）
+const fileNames = {user: '', events: ''};
+// 読み込んだ JSON の文字列（修正依頼文にもそのまま使う）
+const inputs = {user: '', events: ''};
+
+function showProblems(issues, fatal) {
+  const box = $('problems');
+  box.hidden = !issues.length;
+  if (!issues.length) return;
+  $('problems-title').textContent = fatal ? '読み込めませんでした（直す点 ' + issues.length + '種類）' : 'ログの確認で見つかった点（' + issues.length + '種類）';
+  $('problems-lead').textContent = (fatal ? '形式が決まりと違うため表示できません。' + (model ? '画面には前に表示できたデータが残っています。' : '') : '表示はできていますが、次の点を直すと正確になります。')
+    + '下の「直し方」に沿って直すか、「AIへの修正依頼文をコピー」を押して、行動ログを作ったAIのチャットに貼り付けてください。直ったJSONを読み込み直すと再確認します。';
+  const list = $('problem-list'); list.replaceChildren();
+  for (const x of issues) {
+    const li = el('li');
+    li.append(el('span', x.level === 'error' ? '表示できない' : '要修正', 'lv' + (x.level === 'error' ? '' : ' minor')), el('span', x.where, 'where'), el('span', x.msg), el('span', x.fix, 'fix'));
+    list.append(li);
+  }
+  const userSide = issues.every(x => String(x.where).startsWith('ユーザー情報'));
+  $('fix-text').value = userSide ? fixRequest(issues, 'ユーザー情報（user.json）', inputs.user) : fixRequest(issues, '行動ログ（events.json）', inputs.events);
+  $('copy-status').textContent = '';
+}
+$('copy-fix').addEventListener('click', async () => {
+  const t = $('fix-text');
+  try { await navigator.clipboard.writeText(t.value); $('copy-status').textContent = 'コピーしました。AIのチャットに貼り付けてください。'; }
+  catch { $('fix-box').open = true; t.focus(); t.select(); $('copy-status').textContent = '自動でコピーできませんでした。下の依頼文を選択済みなので Ctrl+C でコピーしてください。'; }
+});
+
+function apply(keep) {
+  try {
+    let user, events; const errs = [];
+    // user.json は無くても行動ログだけで表示できる
+    try { user = inputs.user.trim() ? parseJsonText(inputs.user, 'ユーザー情報', fileNames.user) : {}; } catch (e) { if (!(e instanceof InputError)) throw e; errs.push(...e.issues); }
+    try { events = parseJsonText(inputs.events, '行動ログ', fileNames.events); } catch (e) { if (!(e instanceof InputError)) throw e; errs.push(...e.issues); }
+    if (errs.length) throw new InputError(errs);
+    const m = buildModel(user, events);
+    render(m, keep);
+  } catch (e) {
+    const issues = e instanceof InputError ? e.issues : [{level: 'error', where: '全体', msg: '想定していないエラーが起きました（' + e.message + '）。', fix: '入力したJSONを確認してください。'}];
+    showProblems(issues, true);
+    $('events-status').textContent = '読み込めませんでした。下の「直す点」を確認してください。';
+    $('problems').scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
+}
+
+
+// ユーザー情報・行動ログの入力を受け取る。ファイル名は問わず、置いた欄（kind）で扱いを決める
+function setInput(kind, text, name) {
+  inputs[kind] = text;
+  fileNames[kind] = name || '';
+  // 行動ログがあればすぐ表示する（ユーザー情報は無くても表示でき、後から入れると反映される）
+  if (inputs.events.trim()) apply(false);
+  else $('user-status').textContent = (name ? name + ' を' : 'テキストを') + 'ユーザー情報として読み込みました。続けて行動ログを入れてください。';
+}
+for (const kind of ['user', 'events']) {
+  $(kind + '-file').addEventListener('change', async () => { const f = $(kind + '-file').files[0]; if (f) setInput(kind, await f.text(), f.name); });
+}
+
+// ドロップされたものを、イベント中に同期的に取り出す（イベントが終わると dataTransfer は読めなくなる）
+function grabDrop(dt) {
+  const items = [...(dt.items || [])].filter(it => it.kind === 'file');
+  return {
+    text: dt.getData('text/plain'),
+    files: [...dt.files],
+    entries: items.map(it => (it.webkitGetAsEntry ? it.webkitGetAsEntry() : null)),
+    // 新しいフォルダ読み取り方式（Chrome・Edge）。file:// で開いた時も使える場合がある
+    handles: items.map(it => (it.getAsFileSystemHandle ? it.getAsFileSystemHandle().catch(() => null) : Promise.resolve(null)))
+  };
+}
+// フォルダは中のファイルまで集める。新しい方式 → 古い方式の順に試し、両方だめなら理由を返す
+async function collectFiles(g) {
+  const hasDir = g.entries.some(en => en && en.isDirectory);
+  const handles = await Promise.all(g.handles);
+  if (!hasDir && !handles.some(h => h && h.kind === 'directory')) return {files: g.files};
+  const errors = [];
+  if (handles.some(h => h)) {
+    try {
+      const out = [];
+      const walk = async h => { if (h.kind === 'file') out.push(await h.getFile()); else for await (const c of h.values()) await walk(c); };
+      for (const h of handles) if (h) await walk(h);
+      return {files: out};
+    } catch (e) { errors.push(e.name || e.message); }
+  }
+  try {
+    const out = [];
+    const walk = async en => {
+      if (en.isFile) { out.push(await new Promise((res, rej) => en.file(res, rej))); return; }
+      const reader = en.createReader();
+      for (;;) { const batch = await new Promise((res, rej) => reader.readEntries(res, rej)); if (!batch.length) break; for (const c of batch) await walk(c); }
+    };
+    for (const en of g.entries) if (en) await walk(en);
+    return {files: out};
+  } catch (e) { errors.push(e.name || e.message); }
+  return {files: [], folderError: errors.join(' / ') || '不明'};
+}
+// ドロップ先の見た目。子要素の出入りで消えないよう、枠の外へ出た時だけ外す
+function dropZone(node, onDrop, statusId) {
+  node.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; node.classList.add('drop'); });
+  node.addEventListener('dragleave', e => { if (!node.contains(e.relatedTarget)) node.classList.remove('drop'); });
+  node.addEventListener('drop', async e => {
+    e.preventDefault(); e.stopPropagation(); node.classList.remove('drop');
+    const g = grabDrop(e.dataTransfer);
+    try {
+      const {files, folderError} = await collectFiles(g);
+      if (folderError) { $(statusId).textContent = 'フォルダの中身をブラウザが読み取れませんでした（' + folderError + '）。data フォルダを開いて中のファイルをすべて選択し、この欄に置いてください。「ファイルを選択」から data フォルダを選ぶ方法でも読み込めます。'; return; }
+      await onDrop(files, g.text);
+    } catch (err) { $(statusId).textContent = '置いたものを読み取れませんでした（' + err.message + '）。「ファイルを選択」から選んでください。'; }
+  });
+}
+// 各欄：置いた欄のデータとして読み込む（ファイル名は問わない。チャットで選択したJSONのテキストも可）
+for (const kind of ['user', 'events']) dropZone($('slot-' + kind), async (files, text) => {
+  const f = files.find(x => !x.name.startsWith('.'));
+  if (f) setInput(kind, await f.text(), f.name);
+  else if (text.trim()) setInput(kind, text, '');
+}, kind + '-status');
+
+// 欄の外（枠全体）に置いた場合：中身でユーザー情報・行動ログに振り分ける（data フォルダのファイルは無視する）
+const area = $('input-area');
+dropZone(area, async (files, text) => {
+  let user = null, events = null;
+  const sort = (t, name) => {
+    let v; try { v = JSON.parse(t.replace(/^\uFEFF/, '')); } catch { v = null; }
+    // 中身で判定。読めないJSONは名前に user を含む場合だけユーザー情報、それ以外は行動ログとして扱う
+    const isUser = v ? (!Array.isArray(v) && !Array.isArray(v.events)) : /user/i.test(name || '');
+    if (isUser) user = [t, name]; else events = [t, name];
+  };
+  for (const f of files) {
+    const nm = f.name.toLowerCase();
+    if (nm.startsWith('.') || ['product.json', 'product-light.json', 'blog.json', 'news.json', 'blog-light.json', 'news-light.json', 'behavior.json', 'brand.json', 'company.json', 'product_category.json'].includes(nm)) continue;
+    sort(await f.text(), f.name);
+  }
+  if (!files.length && text.trim()) sort(text, '');
+  if (user) { inputs.user = user[0]; fileNames.user = user[1]; }
+  if (events) { inputs.events = events[0]; fileNames.events = events[1]; }
+  if (user || events) setInput(events ? 'events' : 'user', inputs[events ? 'events' : 'user'], (events || user)[1]);
+  else $('events-status').textContent = '置いたものから読み込めるデータが見つかりませんでした。各欄の上に置いてください。';
+}, 'events-status');
+/* ---------- 起動 ---------- */
+(async () => {
+  let data = null;
+  try { data = JSON.parse($('session-data').textContent); }
+  catch (e) {
+    setFileStatus();
+    showProblems([{level: 'error', where: 'HTMLに埋め込んだデータ', msg: 'session-data の中身をJSONとして読み取れません（' + e.message + '）。', fix: '③の手順で置き換えた {"user": …, "events": …} の括弧の対応とカンマを確認してください。'}], true);
+    return;
+  }
+  if (data && data.pages) ec = makeEc(data.pages.products, data.pages.blogs, data.pages.news, 'embedded', null, data.pages.categories);
+  else if (window.EC_DATA) ec = makeEc(window.EC_DATA.products, window.EC_DATA.blogs, window.EC_DATA.news, 'bundled', null, window.EC_DATA.categories);
+  setFileStatus();
+  if (data && Array.isArray(data.events) && data.events.length) {
+    inputs.user = JSON.stringify(data.user || {}, null, 2);
+    inputs.events = JSON.stringify(data.events, null, 2);
+    apply(false);
+  }
+})();
+})();
+</script>
+</body>
+</html>

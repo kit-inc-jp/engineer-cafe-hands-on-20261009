@@ -1,0 +1,183 @@
+[
+  {
+    "user_id": "sim-20261007-02",
+    "timestamp": "2026-10-10 00:30:00",
+    "site_activities": {
+      "event_name": "view_top",
+      "event_params": { "path": "/" }
+    },
+    "reason_for_the_action": "休日の朝、コーヒーを飲みながら新しい読み物が出ていないか見ようと、いつものサイトを開いた。"
+  },
+  {
+    "user_id": "sim-20261007-02",
+    "timestamp": "2026-10-10 00:30:25",
+    "site_activities": {
+      "event_name": "view_article",
+      "event_params": {
+        "path": "/blogs/7",
+        "article_id": 7,
+        "article_title": "薬味を添える、小さな手仕事。ステンレスおろし金の使い心地"
+      }
+    },
+    "reason_for_the_action": "新着ブログ3件の中で、料理好きとして「薬味を添える、小さな手仕事」というタイトルが一番気になったので開いた。"
+  },
+  {
+    "user_id": "sim-20261007-02",
+    "timestamp": "2026-10-10 00:33:05",
+    "site_activities": {
+      "event_name": "view_item",
+      "event_params": {
+        "path": "/items/342",
+        "item_id": 342,
+        "item_name": "暮らしの基本 コンパクト ステンレスおろし金",
+        "price": 1172,
+        "tax_rate_percent": 10,
+        "spec_id": 1
+      }
+    },
+    "reason_for_the_action": "記事に「小ぶりで場所を取らない」「錆びにくく手入れが簡単」とあり、置き場所が少ないうちの台所にも合いそうなので、紹介されていたおろし金の詳細を開いた。"
+  },
+  {
+    "user_id": "sim-20261007-02",
+    "timestamp": "2026-10-10 00:34:15",
+    "site_activities": {
+      "event_name": "add_to_cart",
+      "event_params": {
+        "path": "/items/342",
+        "item_id": 342,
+        "item_name": "暮らしの基本 コンパクト ステンレスおろし金",
+        "price": 1172,
+        "tax_rate_percent": 10,
+        "spec_id": 1,
+        "quantity": 1
+      }
+    },
+    "reason_for_the_action": "1,290円で予算内、「軽い力でおろせる」「使用後はブラシでカスを取る」と手入れ方法も分かって安心できたので、1つカートに入れた。"
+  },
+  {
+    "user_id": "sim-20261007-02",
+    "timestamp": "2026-10-10 00:34:45",
+    "site_activities": {
+      "event_name": "view_blog_list",
+      "event_params": { "path": "/blogs" }
+    },
+    "reason_for_the_action": "まだ時間があるので、ほかにも台所や食卓に関する読み物がないかブログ一覧を見た。"
+  },
+  {
+    "user_id": "sim-20261007-02",
+    "timestamp": "2026-10-10 00:35:20",
+    "site_activities": {
+      "event_name": "view_article",
+      "event_params": {
+        "path": "/blogs/3",
+        "article_id": 3,
+        "article_title": "ほうじ茶ラテベースでつくる、穏やかな午後のひととき"
+      }
+    },
+    "reason_for_the_action": "一覧の「牛乳や豆乳で割るだけで本格的なほうじ茶ラテ」という紹介文が、肌寒くなってきた休日の一杯にちょうど良さそうで記事を開いた。"
+  },
+  {
+    "user_id": "sim-20261007-02",
+    "timestamp": "2026-10-10 00:37:40",
+    "site_activities": {
+      "event_name": "view_item",
+      "event_params": {
+        "path": "/items/594",
+        "item_id": 594,
+        "item_name": "暮らしの基本 ほうじ茶 ラテベース",
+        "price": 361,
+        "tax_rate_percent": 8,
+        "spec_id": 1
+      }
+    },
+    "reason_for_the_action": "記事の「本品1に対して牛乳3で混ぜるだけ」という手軽さに惹かれ、値段と中身を確かめるため紹介商品のラテベースを開いた。"
+  },
+  {
+    "user_id": "sim-20261007-02",
+    "timestamp": "2026-10-10 00:38:30",
+    "site_activities": {
+      "event_name": "add_to_cart",
+      "event_params": {
+        "path": "/items/594",
+        "item_id": 594,
+        "item_name": "暮らしの基本 ほうじ茶 ラテベース",
+        "price": 361,
+        "tax_rate_percent": 8,
+        "spec_id": 1,
+        "quantity": 1
+      }
+    },
+    "reason_for_the_action": "390円と手頃で、温めても冷やしてもよいとあり、夫と週末に飲むのに試してみたくなったので1本カートに入れた。"
+  },
+  {
+    "user_id": "sim-20261007-02",
+    "timestamp": "2026-10-10 00:39:00",
+    "site_activities": {
+      "event_name": "view_cart",
+      "event_params": {
+        "path": "/cart",
+        "items": [
+          { "item_id": 342, "item_name": "暮らしの基本 コンパクト ステンレスおろし金", "price": 1172, "tax_rate_percent": 10, "spec_id": 1, "quantity": 1 },
+          { "item_id": 594, "item_name": "暮らしの基本 ほうじ茶 ラテベース", "price": 361, "tax_rate_percent": 8, "spec_id": 1, "quantity": 1 }
+        ]
+      }
+    },
+    "reason_for_the_action": "読み物から選んだ2点で合計1,680円と、3,000円の予算に十分収まっているかカートで確かめた。"
+  },
+  {
+    "user_id": "sim-20261007-02",
+    "timestamp": "2026-10-10 00:39:40",
+    "site_activities": {
+      "event_name": "begin_checkout",
+      "event_params": {
+        "path": "/checkout",
+        "items": [
+          { "item_id": 342, "item_name": "暮らしの基本 コンパクト ステンレスおろし金", "price": 1172, "tax_rate_percent": 10, "spec_id": 1, "quantity": 1 },
+          { "item_id": 594, "item_name": "暮らしの基本 ほうじ茶 ラテベース", "price": 361, "tax_rate_percent": 8, "spec_id": 1, "quantity": 1 }
+        ]
+      }
+    },
+    "reason_for_the_action": "どちらも使い方が記事でよく分かり、迷う理由がなかったので、このまま購入手続きに進んだ。"
+  },
+  {
+    "user_id": "sim-20261007-02",
+    "timestamp": "2026-10-10 00:40:30",
+    "site_activities": {
+      "event_name": "purchase",
+      "event_params": {
+        "path": "/checkout/complete",
+        "transaction_id": "tx-sim-20261007-02-01",
+        "items": [
+          { "item_id": 342, "item_name": "暮らしの基本 コンパクト ステンレスおろし金", "price": 1172, "tax_rate_percent": 10, "spec_id": 1, "quantity": 1 }
+        ],
+        "shipping_address": { "label": "自宅", "prefecture": "東京都", "postal_code": "100-0000", "address1": "千代田区架空町1-2-3", "address2": null }
+      }
+    },
+    "reason_for_the_action": "登録済みの自宅の配送先と支払い方法のまま、内容を確認して注文を確定した（税率10%のおろし金の注文）。"
+  },
+  {
+    "user_id": "sim-20261007-02",
+    "timestamp": "2026-10-10 00:40:31",
+    "site_activities": {
+      "event_name": "purchase",
+      "event_params": {
+        "path": "/checkout/complete",
+        "transaction_id": "tx-sim-20261007-02-02",
+        "items": [
+          { "item_id": 594, "item_name": "暮らしの基本 ほうじ茶 ラテベース", "price": 361, "tax_rate_percent": 8, "spec_id": 1, "quantity": 1 }
+        ],
+        "shipping_address": { "label": "自宅", "prefecture": "東京都", "postal_code": "100-0000", "address1": "千代田区架空町1-2-3", "address2": null }
+      }
+    },
+    "reason_for_the_action": "同じ注文の確定で、軽減税率8%のラテベースは別の注文番号として記録された。"
+  },
+  {
+    "user_id": "sim-20261007-02",
+    "timestamp": "2026-10-10 00:41:00",
+    "site_activities": {
+      "event_name": "leave_site",
+      "event_params": { "path": "/checkout/complete" }
+    },
+    "reason_for_the_action": "読み物で気になった2点を買えて満足したので、朝食の支度に戻るためサイトを閉じた。"
+  }
+]
